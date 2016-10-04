@@ -7,52 +7,66 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 
+
 /**
  * Created by ivanov-av
  * 04.10.2016 10:34.
  */
-public class Server {
-    private ServerSocket server;
-    public Integer server_port; // tcp port to listen on
-    public static void main(String[] args) throws IOException {
-        System.out.println("Welcome to Server side");
-        BufferedReader in = null;
-        PrintWriter out= null;
+public class Server implements Runnable {
+    protected int serverPort; // tcp port to listen on
+    protected ServerSocket serverSocket = null;
+    protected boolean isStopped = false;
+    protected Thread runningThread = null;
 
-        ServerSocket servers = null;
-        Socket fromclient = null;
+    public Server(int port) {
+        this.serverPort = port;
+    }
 
-        // create server socket
+    public Server() {
+        this.serverPort = ServerDefaultSettings.SERVER_PORT;
+    }
+
+    public void run() {
+        synchronized (this) {
+            this.runningThread = Thread.currentThread ( );
+        }
+        openServerSocket ( );
+        while (!isStopped ( )) {
+            Socket clientSocket = null;
+            try {
+                clientSocket = this.serverSocket.accept ( );
+            } catch (IOException e) {
+                if (isStopped ( )) {
+                    System.out.println ("Server Stopped.");
+                    return;
+                }
+                throw new RuntimeException (
+                        "Error accepting client connection", e);
+            }
+            new Thread (new ServerWorker (clientSocket)).start ( );
+        }
+        System.out.println ("Server Stopped.");
+    }
+
+    private void openServerSocket() {
         try {
-            servers = new ServerSocket(4444);
+            this.serverSocket = new ServerSocket (this.serverPort);
         } catch (IOException e) {
-            System.out.println("Couldn't listen to port 4444");
-            System.exit(-1);
+            throw new RuntimeException (String.format ("Cannot open port %d", this.serverPort), e);
         }
+    }
 
+
+    private synchronized boolean isStopped() {
+        return this.isStopped;
+    }
+
+    public synchronized void stop() {
+        this.isStopped = true;
         try {
-            System.out.print("Waiting for a client...");
-            fromclient= servers.accept();
-            System.out.println("Client connected");
+            this.serverSocket.close ( );
         } catch (IOException e) {
-            System.out.println("Can't accept");
-            System.exit(-1);
+            throw new RuntimeException ("Error closing server", e);
         }
-
-        in  = new BufferedReader(new
-                InputStreamReader(fromclient.getInputStream()));
-        out = new PrintWriter(fromclient.getOutputStream(),true);
-        String         input,output;
-
-        System.out.println("Wait for messages");
-        while ((input = in.readLine()) != null) {
-            if (input.equalsIgnoreCase("exit")) break;
-            out.println("S ::: "+input);
-            System.out.println(input);
-        }
-        out.close();
-        in.close();
-        fromclient.close();
-        servers.close();
     }
 }
